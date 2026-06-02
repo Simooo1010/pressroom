@@ -266,6 +266,19 @@
   padding: 40px;
   display: flex;
   justify-content: center;
+  background-color: var(--surface);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+.preview-wrapper {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+  height: auto;
+  transition: height 0.15s ease;
 }
 
 .preview-container {
@@ -278,10 +291,25 @@
   overflow: hidden;
   padding: 0;
   position: relative;
+  transform: scale(var(--preview-scale, 1));
+  transform-origin: top center;
+  flex-shrink: 0;
+  transition: transform 0.15s ease, box-shadow 0.3s ease;
+}
+
+/* Fallback print/PDF margins */
+[class^="format-"]:not(.format-btn) {
+  padding: var(--print-margin, 25mm) !important;
+  transition: padding 0.15s ease;
+}
+
+/* Scale margins proportionally inside preview page */
+.preview-container [class^="format-"]:not(.format-btn) {
+  padding: var(--preview-margin, 25mm) !important;
 }
 
 [data-theme='dark'] .preview-container {
-  box-shadow: 0 2px 30px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
 }
 
 .preview-empty {
@@ -383,10 +411,8 @@
 /* --- Responsive --- */
 @media (max-width: 768px) {
   .preview-container {
-    width: 100%;
-    min-height: auto;
-    border-radius: 0;
-    box-shadow: none;
+    border-radius: 4px;
+    border: 1px solid var(--border);
   }
 
   .input-section {
@@ -406,7 +432,8 @@
   }
 
   .preview-section {
-    padding: 20px 0;
+    padding: 24px 16px;
+    background-color: var(--surface);
   }
 
   .app-header {

@@ -48,30 +48,33 @@ const dom = {
 // ─── Theme Toggle ───────────────────────────────────────
 function initTheme() {
   const saved = localStorage.getItem('pressroom-theme');
-  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  const theme = saved || (prefersDark ? 'dark' : 'light');
-  setTheme(theme);
+  if (saved) {
+    setTheme(saved, false);
+  } else {
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    setTheme(prefersDark ? 'dark' : 'light', false);
+  }
 
   // Listen for system theme changes if user hasn't explicitly saved a preference
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
     if (!localStorage.getItem('pressroom-theme')) {
-      setTheme(e.matches ? 'dark' : 'light');
+      setTheme(e.matches ? 'dark' : 'light', false);
     }
   });
 }
 
-function setTheme(theme) {
+function setTheme(theme, save = false) {
   document.documentElement.setAttribute('data-theme', theme);
-  localStorage.setItem('pressroom-theme', theme);
+  if (save) {
+    localStorage.setItem('pressroom-theme', theme);
+  }
   dom.themeIcon.textContent = theme === 'dark' ? '☾' : '☀';
 }
 
 function toggleTheme() {
   const current = document.documentElement.getAttribute('data-theme') || 'light';
   const newTheme = current === 'dark' ? 'light' : 'dark';
-  setTheme(newTheme);
-  // Explicitly save user's manual override
-  localStorage.setItem('pressroom-theme', newTheme);
+  setTheme(newTheme, true);
 }
 
 // ─── Mode Toggle ────────────────────────────────────────
@@ -186,6 +189,25 @@ async function fetchArticles(input) {
   }
 }
 
+// ─── Update Preview Scale ───────────────────────────────
+function updateScale() {
+  const container = dom.previewContainer;
+  const wrapper = document.getElementById('preview-wrapper');
+  const section = document.getElementById('preview-section');
+  if (!container || !wrapper || !section) return;
+
+  const sectionStyle = window.getComputedStyle(section);
+  const paddingLeft = parseFloat(sectionStyle.paddingLeft) || 0;
+  const paddingRight = parseFloat(sectionStyle.paddingRight) || 0;
+  const availableWidth = section.clientWidth - paddingLeft - paddingRight;
+
+  const a4WidthPx = 793.7; // 210mm at 96 DPI
+  const scale = availableWidth < a4WidthPx ? availableWidth / a4WidthPx : 1;
+
+  container.style.setProperty('--preview-scale', scale);
+  wrapper.style.height = `${container.offsetHeight * scale}px`;
+}
+
 // ─── Render Preview ─────────────────────────────────────
 function renderPreview() {
   if (!state.articles) return;
@@ -203,10 +225,12 @@ function renderPreview() {
     const formatDiv = dom.previewContent.firstElementChild;
     if (formatDiv) {
       formatDiv.dataset.font = state.options.font;
-      formatDiv.style.padding = `${state.options.margin}mm`;
+      formatDiv.style.setProperty('--print-margin', `${state.options.margin}mm`);
+      formatDiv.style.setProperty('--preview-margin', `${(state.options.margin / 210) * 100}%`);
     }
 
     dom.previewContent.style.opacity = '1';
+    updateScale();
   }, 150);
 }
 
@@ -322,14 +346,21 @@ function init() {
   dom.fontSelect.addEventListener('change', (e) => {
     state.options.font = e.target.value;
     const formatDiv = dom.previewContent.firstElementChild;
-    if (formatDiv) formatDiv.dataset.font = state.options.font;
+    if (formatDiv) {
+      formatDiv.dataset.font = state.options.font;
+      updateScale();
+    }
   });
 
   dom.marginSlider.addEventListener('input', (e) => {
     state.options.margin = e.target.value;
     dom.marginVal.textContent = state.options.margin;
     const formatDiv = dom.previewContent.firstElementChild;
-    if (formatDiv) formatDiv.style.padding = `${state.options.margin}mm`;
+    if (formatDiv) {
+      formatDiv.style.setProperty('--print-margin', `${state.options.margin}mm`);
+      formatDiv.style.setProperty('--preview-margin', `${(state.options.margin / 210) * 100}%`);
+      updateScale();
+    }
   });
 
   dom.excludeEmbeds.addEventListener('change', (e) => {
@@ -339,6 +370,10 @@ function init() {
 
   // Smooth transitions on preview content
   dom.previewContent.style.transition = 'opacity 0.15s ease';
+
+  // Resize and initial layout scale
+  window.addEventListener('resize', updateScale);
+  updateScale();
 }
 
 // ─── Start ──────────────────────────────────────────────

@@ -32,6 +32,10 @@
     min-height: auto;
   }
 
+  [class^="format-"] {
+    padding: var(--print-margin, 20mm) !important;
+  }
+
   /* --- Page Setup --- */
   @page {
     margin: 20mm;
