@@ -366,6 +366,31 @@ export async function parseArticle(url) {
 
     const elements = walkChildren($, bodyContainer);
 
+    // Fallback: Extract from JSON-LD if bodyContainer was missing/empty
+    if (elements.length === 0) {
+      $('script[type="application/ld+json"]').each((_, el) => {
+        try {
+          const data = JSON.parse($(el).html() || '{}');
+          if ((data['@type'] === 'SocialMediaPosting' || data['@type'] === 'Article' || data['@type'] === 'BlogPosting') && data.text) {
+            const paragraphs = data.text.split(/\n+/).filter(p => p.trim());
+            paragraphs.forEach(p => {
+              elements.push({ type: 'paragraph', content: p.trim() });
+            });
+            if (data.image) {
+              const images = Array.isArray(data.image) ? data.image : [data.image];
+              images.forEach(img => {
+                const src = typeof img === 'string' ? img : img.url;
+                if (src) elements.push({ type: 'image', src, caption: '', alt: '' });
+              });
+            }
+            if (elements.length > 0) return false;
+          }
+        } catch (e) {
+          // ignore parsing errors
+        }
+      });
+    }
+
     return {
       url,
       title,
@@ -405,37 +430,88 @@ export async function parseNote(url) {
     const html = await response.text();
     const $ = cheerio.load(html);
 
-    // Notes have a simpler structure
+    // Notes have a simpler, meta-centric SEO structure in direct fetch
     const author =
+      $('meta[property="og:title"]').attr('content')?.trim() ||
       $('meta[name="author"]').attr('content')?.trim() ||
       $('.note-author, .pencraft[data-testid="AuthorName"]').first().text().trim() ||
-      '';
+      'Substack Author';
 
     const publicationName =
       $('meta[property="og:site_name"]').attr('content')?.trim() ||
-      '';
+      'Substack Note';
 
-    const date =
+    const rawDate =
+      $('meta[property="og:published_time"]').attr('content') ||
       $('time[datetime]').first().attr('datetime') ||
       $('meta[property="article:published_time"]').attr('content') ||
       '';
 
-    // The Note body lives in .note-body, .note-content, or a similar container
+    let date = rawDate;
+    if (rawDate) {
+      try {
+        const d = new Date(rawDate);
+        if (!isNaN(d.getTime())) {
+          date = d.toLocaleDateString(undefined, {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          });
+        }
+      } catch (e) {
+        // Fall back to raw date
+      }
+    }
+
+    // The Note body lives in .ProseMirror (under SEO rendering) or Pencraft containers
     const bodyContainer =
-      $('.note-body').first().length
-        ? $('.note-body').first()
-        : $('.note-content').first().length
-          ? $('.note-content').first()
-          : $('.available-content').first().length
-            ? $('.available-content').first()
-            : $('article').first();
+      $('.ProseMirror').first().length
+        ? $('.ProseMirror').first()
+        : $('div[class*="feedCommentBodyInner"]').first().length
+          ? $('div[class*="feedCommentBodyInner"]').first()
+          : $('div[class*="feedCommentBody"]').first().length
+            ? $('div[class*="feedCommentBody"]').first()
+            : $('.note-body').first().length
+              ? $('.note-body').first()
+              : $('.note-content').first().length
+                ? $('.note-content').first()
+                : $('.available-content').first().length
+                  ? $('.available-content').first()
+                  : $('article').first();
 
     const elements = walkChildren($, bodyContainer);
+
+    // Fallback 1: Extract from JSON-LD if bodyContainer was missing/empty
+    if (elements.length === 0) {
+      $('script[type="application/ld+json"]').each((_, el) => {
+        try {
+          const data = JSON.parse($(el).html() || '{}');
+          if (data['@type'] === 'SocialMediaPosting' && data.text) {
+            // Split text into paragraphs
+            const paragraphs = data.text.split(/\n+/).filter(p => p.trim());
+            paragraphs.forEach(p => {
+              elements.push({ type: 'paragraph', content: p.trim() });
+            });
+            // Add images if present
+            if (data.image) {
+              const images = Array.isArray(data.image) ? data.image : [data.image];
+              images.forEach(img => {
+                const src = typeof img === 'string' ? img : img.url;
+                if (src) elements.push({ type: 'image', src, caption: '', alt: '' });
+              });
+            }
+            if (elements.length > 0) return false; // Break Cheerio loop
+          }
+        } catch (e) {
+          // ignore parsing errors
+        }
+      });
+    }
 
     // Notes don't normally have a title — derive one from the first paragraph
     const firstText = elements.find((e) => e.type === 'paragraph' || e.type === 'heading');
     const title = firstText
-      ? (firstText.content || '').replace(/<[^>]+>/g, '').slice(0, 120)
+      ? (firstText.content || '').replace(/<[^>]+>/g, '').slice(0, 120) + ((firstText.content || '').length > 120 ? '...' : '')
       : 'Substack Note';
 
     return {
