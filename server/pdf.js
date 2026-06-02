@@ -85,16 +85,17 @@ export async function generatePDF(html, css = '', options = {}) {
     });
 
     const page = await browser.newPage();
+    
+    page.on('console', msg => console.log('[Puppeteer Console]', msg.type(), msg.text()));
 
-    // Set the full HTML document as page content and wait until all
-    // network requests (fonts, images) have settled.
+    // Set the full HTML document as page content
     await page.setContent(buildFullDocument(html, css), {
-      waitUntil: 'networkidle0',
-      timeout: 60_000, // generous timeout for heavy pages
+      waitUntil: 'domcontentloaded',
+      timeout: 30_000, 
     });
 
     // Give fonts an extra moment to render (some Google Fonts load lazily)
-    await page.evaluateHandle('document.fonts.ready');
+    await new Promise(r => setTimeout(r, 2000));
 
     // Generate the PDF
     const pdfBuffer = await page.pdf({

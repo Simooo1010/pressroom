@@ -107,9 +107,10 @@
 
 .format-newspaper .newspaper-columns p {
   margin-bottom: 14px;
+  break-inside: auto; /* allow breaking across columns, but Paged.js orphans/widows will help */
 }
 
-/* --- Column Headings --- */
+/* Prevent headers from being left at the bottom of columns */
 .format-newspaper .newspaper-columns h2,
 .format-newspaper .newspaper-columns h3 {
   font-family: 'Playfair Display', serif;

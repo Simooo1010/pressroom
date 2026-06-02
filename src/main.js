@@ -4,6 +4,7 @@
  */
 
 import { render, getFormatCSS } from './renderer.js';
+import { Previewer } from 'pagedjs';
 
 // ─── State ──────────────────────────────────────────────
 const state = {
@@ -209,6 +210,8 @@ function updateScale() {
 }
 
 // ─── Render Preview ─────────────────────────────────────
+let pagedPreviewer = null;
+
 function renderPreview() {
   if (!state.articles) return;
 
@@ -218,15 +221,42 @@ function renderPreview() {
 
   // Fade transition
   dom.previewContent.style.opacity = '0';
-  setTimeout(() => {
-    dom.previewContent.innerHTML = html;
+  
+  // Use timeout to allow CSS transition to play
+  setTimeout(async () => {
+    // Clear previous pagedjs generated styles to avoid accumulation
+    document.querySelectorAll('[data-pagedjs-inserted-styles]').forEach(el => el.remove());
+    
+    dom.previewContent.innerHTML = '';
+    
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
     
     // Apply customizations to the generated format wrapper
-    const formatDiv = dom.previewContent.firstElementChild;
+    const formatDiv = doc.body.firstElementChild;
     if (formatDiv) {
       formatDiv.dataset.font = state.options.font;
-      formatDiv.style.setProperty('--print-margin', `${state.options.margin}mm`);
-      formatDiv.style.setProperty('--preview-margin', `${(state.options.margin / 210) * 100}%`);
+      // We no longer use CSS variables for print margin on the container
+      // because Paged.js uses actual @page rules.
+    }
+
+    // Inject custom @page style for margins
+    const styleBlock = doc.createElement('style');
+    styleBlock.textContent = `
+      @page {
+        margin: ${state.options.margin}mm !important;
+        size: A4 portrait;
+      }
+    `;
+    doc.body.appendChild(styleBlock);
+
+    try {
+      pagedPreviewer = new Previewer();
+      // Paged.js requires an array of stylesheets if we want to pass them explicitly,
+      // but it will automatically read document.styleSheets. We just pass the body.
+      await pagedPreviewer.preview(doc.body, [], dom.previewContent);
+    } catch (err) {
+      console.error('Paged.js rendering error:', err);
     }
 
     dom.previewContent.style.opacity = '1';
@@ -241,73 +271,11 @@ function printPDF() {
 
 // ─── Download PDF ───────────────────────────────────────
 async function downloadPDF() {
-  if (!state.articles) return;
-
-  const btn = dom.btnDownload;
-  const originalText = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = 'Generating…';
-
-  try {
-    // Get the rendered HTML and all format CSS
-    const html = dom.previewContent.innerHTML;
-
-    // Collect all CSS from format stylesheets
-    const cssSheets = [
-      '/src/styles/base.css',
-      '/src/styles/print-common.css',
-      `/src/styles/format-${state.activeFormat}.css`,
-      '/src/styles/customization.css',
-    ];
-
-    // Fetch each CSS file and concatenate
-    const cssTexts = await Promise.all(
-      cssSheets.map(async (href) => {
-        try {
-          const resp = await fetch(href);
-          return await resp.text();
-        } catch {
-          return '';
-        }
-      })
-    );
-    const css = cssTexts.join('\n');
-
-    const response = await fetch('/api/pdf', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        html,
-        css,
-        format: state.activeFormat,
-      }),
-    });
-
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.error || 'PDF generation failed.');
-    }
-
-    // Download the blob
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    const title = state.articles[0]?.title || 'pressroom';
-    const safeName = title.replace(/[^a-zA-Z0-9\s-]/g, '').trim().replace(/\s+/g, '-').toLowerCase();
-    a.href = url;
-    a.download = `${safeName}-${state.activeFormat}.pdf`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
-  } catch (err) {
-    console.error('Download error:', err);
-    showError(err.message || 'Failed to generate PDF.');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = originalText;
-  }
+  // Paged.js formats the DOM for printing natively.
+  // The most reliable way to get a PDF that matches the preview exactly
+  // is to use the browser's native print dialog and save as PDF.
+  // This avoids heavy backend Puppeteer rendering and Render spin-down delays.
+  window.print();
 }
 
 // ─── Event Listeners ────────────────────────────────────

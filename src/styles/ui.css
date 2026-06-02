@@ -282,24 +282,41 @@
 }
 
 .preview-container {
-  width: 210mm;
+  width: auto;
   min-height: 297mm;
-  background: white;
-  color: #1A1A1A;
-  box-shadow: 0 2px 20px rgba(0, 0, 0, 0.08);
-  border-radius: 2px;
-  overflow: hidden;
+  /* background and shadow move to .pagedjs_page */
+  overflow: visible; /* Let pages overflow and stack */
   padding: 0;
   position: relative;
   transform: scale(var(--preview-scale, 1));
   transform-origin: top center;
   flex-shrink: 0;
-  transition: transform 0.15s ease, box-shadow 0.3s ease;
+  transition: transform 0.15s ease;
+}
+
+/* --- Paged.js Screens Preview Styles --- */
+@media screen {
+  .pagedjs_pages {
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+    align-items: center;
+  }
+  
+  .pagedjs_page {
+    background: white;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    border-radius: 2px;
+  }
+  
+  [data-theme='dark'] .pagedjs_page {
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+  }
 }
 
 /* Fallback print/PDF margins */
 [class^="format-"]:not(.format-btn) {
-  padding: var(--print-margin, 25mm) !important;
+  /* Paged.js handles layout natively, but we keep this as fallback */
   transition: padding 0.15s ease;
 }
 
